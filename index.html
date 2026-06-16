@@ -190,6 +190,7 @@
         <div class="radio-group-container" style="margin-bottom: 10px;">
             <div class="radio-label">画面分割数</div>
             <div class="split-options">
+                <label><input type="radio" name="split-radio" value="1">1分割</label>
                 <label><input type="radio" name="split-radio" value="2">2分割</label>
                 <label><input type="radio" name="split-radio" value="3" checked>3分割</label>
                 <label><input type="radio" name="split-radio" value="4">4分割</label>
@@ -379,15 +380,17 @@
                 srcImg.src = URL.createObjectURL(file);
                 
                 srcImg.onload = () => {
-                    if (srcImg.width >= srcImg.height) {
+                    // 1分割モード、または画像が横長・正方形ならスライス処理を完全にスキップ
+                    if (splitCount === 1 || srcImg.width >= srcImg.height) {
                         srcImg._meta = {
                             name: file.name,
                             size: file.size,
                             lastModified: file.lastModified * 10,
-                            isSlice: false // スライスフラグ
+                            isSlice: false
                         };
                         images.push(srcImg);
                     } else {
+                        // 2分割以上のモードで、かつ縦写真が来たときだけ自動スライスを実行
                         const sliceH = srcImg.height / splitCount;
                         
                         for (let i = 0; i < splitCount; i++) {
@@ -405,8 +408,8 @@
                                 name: `${file.name}_part${i}`,
                                 size: file.size,
                                 lastModified: (file.lastModified * 10) + i,
-                                isSlice: true, // スライスフラグ
-                                sliceIndex: i // 何段目のパーツか
+                                isSlice: true,
+                                sliceIndex: i
                             };
                             
                             images.push(slicedImg);
@@ -428,7 +431,7 @@
             updateRequirements();
             fileInput.value = ""; 
 
-            let msg = `画像の読み込みが完了しました。\n(縦写真のみ上から順に自動スライスを適用しました)\n現在、合計 ${images.length} 個の素材が保持されています。`;
+            let msg = `画像の読み込みが完了しました。\n現在、合計 ${images.length} 個の素材が保持されています。`;
             if (skippedCount > 0) {
                 msg += `\n(重複した画像 ${skippedCount} 枚を自動でスキップしました)`;
             }
@@ -472,26 +475,21 @@
                 ctx.drawImage(img, sx, sy, sWidth, sHeight, drawX, drawY, maxW, maxH);
             }
 
-            // 次に処理する予定の画像パーツ
             let nextImg = images[currentIndex % images.length];
 
-            // ★パズル同期ロジック★
-            // もし次の画像が「縦写真の分割スライス①（sliceIndex === 0）」だった場合、
-            // 現在の描画ローテーション位置（loopPos）が「上段（0）」になるまでスキップ（帳尻合わせ）する
-            if (sequenceStep >= splitCount && nextImg._meta && nextImg._meta.isSlice && nextImg._meta.sliceIndex === 0) {
+            // 1分割時はローテーションの概念がないため、パズル同期スキップ処理は2分割以上の場合のみ適用
+            if (splitCount > 1 && sequenceStep >= splitCount && nextImg._meta && nextImg._meta.isSlice && nextImg._meta.sliceIndex === 0) {
                 let currentLoopPos = (sequenceStep - splitCount) % splitCount;
                 if (currentLoopPos !== 0) {
-                    // 上段（0）にたどり着くまでは、現在のグリッド状態を維持して時間を進める（空回し）
                     for (let i = 0; i < splitCount; i++) {
                         drawImageWithFullStretch(images[paneIndices[i] % images.length], paneH * i);
                     }
                     sequenceStep++;
                     currentFrameCount++;
-                    return; // 次のフレーム処理へ
+                    return;
                 }
             }
 
-            // 通常の描画処理
             if (sequenceStep < splitCount) {
                 paneIndices[sequenceStep] = currentIndex;
                 currentIndex++;
